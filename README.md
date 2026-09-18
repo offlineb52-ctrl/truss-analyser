@@ -4,7 +4,8 @@ An interactive 2D pin-jointed truss analyser. You build a truss and apply suppor
 
 Plain HTML, CSS and JavaScript. There's no framework, no build step and no maths library.
 
-**Run it:** double-click `index.html`.
+**Try it live:** https://offlineb52-ctrl.github.io/truss-analyser/
+**Run it locally:** double-click `index.html`.
 **Test the maths:** `node tests.js` (48 checks against hand calculations).
 
 | File | What it is |
