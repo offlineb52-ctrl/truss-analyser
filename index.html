@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Truss Analyser</title>
+  <meta name="description" content="Interactive 2D pin-jointed truss analyser: method of joints, stability check, member forces and deflected shape.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><path d='M3 25h26M3 25l6.5-13h13L29 25M9.5 12L16 25l6.5-13' fill='none' stroke='%231d1f21' stroke-width='2.2' stroke-linejoin='round'/></svg>">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-name">Truss Analyser</span>
+      <span class="brand-sub">2D pin-jointed truss · method of joints</span>
+    </div>
+
+    <div class="toolbar" role="toolbar" aria-label="Tools">
+      <button class="tool" data-tool="select"  title="Select and move (V)">Select <kbd>V</kbd></button>
+      <button class="tool" data-tool="joint"   title="Place joints (J)">Joint <kbd>J</kbd></button>
+      <button class="tool" data-tool="member"  title="Connect joints with members (M)">Member <kbd>M</kbd></button>
+      <button class="tool" data-tool="support" title="Cycle support: none, pin, roller (S)">Support <kbd>S</kbd></button>
+      <button class="tool" data-tool="load"    title="Add a point load (L)">Load <kbd>L</kbd></button>
+      <button class="tool" data-tool="delete"  title="Delete joints and members (X)">Delete <kbd>X</kbd></button>
+    </div>
+
+    <div class="actions">
+      <span class="label">Presets</span>
+      <button class="btn" data-preset="pratt">Pratt</button>
+      <button class="btn" data-preset="howe">Howe</button>
+      <button class="btn" data-preset="warren">Warren</button>
+      <span class="divider"></span>
+      <button class="btn icon" id="undoBtn" title="Undo (⌘/Ctrl Z)" aria-label="Undo">↶</button>
+      <button class="btn icon" id="redoBtn" title="Redo (⌘/Ctrl ⇧ Z)" aria-label="Redo">↷</button>
+      <button class="btn" id="fitBtn" title="Fit structure to view (F)">Fit</button>
+      <button class="btn" id="clearBtn" title="Remove everything">Clear</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <div class="stage" id="stage">
+      <canvas id="canvas" aria-label="Truss drawing area"></canvas>
+      <div class="hint" id="hint"></div>
+      <div class="legend" id="legend"></div>
+      <div class="coords" id="coords"></div>
+    </div>
+
+    <aside class="panel">
+      <section class="card" id="status" aria-live="polite"></section>
+
+      <section class="card">
+        <h2>Selection</h2>
+        <div id="editor"></div>
+      </section>
+
+      <section class="card">
+        <h2>Member forces <span class="unit">kN · tension +, compression −</span></h2>
+        <div id="memberTable" class="table-wrap"></div>
+      </section>
+
+      <section class="card">
+        <h2>Support reactions <span class="unit">kN · +x right, +y up</span></h2>
+        <div id="reactionTable" class="table-wrap"></div>
+        <div id="checks" class="checks"></div>
+        <button class="btn wide" id="matrixBtn">Show equilibrium matrix A·x = −P</button>
+      </section>
+
+      <section class="card">
+        <h2>Display &amp; material</h2>
+        <div class="options">
+          <label class="check"><input type="checkbox" id="optLabels" checked> Force labels</label>
+          <label class="check"><input type="checkbox" id="optReactions" checked> Reactions</label>
+          <label class="check"><input type="checkbox" id="optIds"> Joint &amp; member IDs</label>
+          <label class="check"><input type="checkbox" id="optDeflected"> Deflected shape</label>
+        </div>
+        <div class="field-row">
+          <label class="field">Deflection scale
+            <span class="input-group">
+              <span class="prefix">×</span><input type="number" id="optFactor" min="1" step="any" disabled>
+            </span>
+          </label>
+          <label class="check inline"><input type="checkbox" id="optAuto" checked> Auto</label>
+        </div>
+        <div class="field-row">
+          <label class="field">E <span class="input-group"><input type="number" id="optE" value="200" min="0" step="any"><span class="suffix">GPa</span></span></label>
+          <label class="field">A <span class="input-group"><input type="number" id="optA" value="1000" min="0" step="any"><span class="suffix">mm²</span></span></label>
+        </div>
+        <div class="field-row">
+          <label class="field">Grid snap
+            <select id="optSnap">
+              <option value="0.25">0.25 m</option>
+              <option value="0.5" selected>0.5 m</option>
+              <option value="1">1 m</option>
+            </select>
+          </label>
+        </div>
+        <p class="note">EA is the same for every member. It only affects deflections: in a statically determinate truss the forces come from equilibrium alone and do not depend on stiffness.</p>
+      </section>
+
+      <details class="card theory">
+        <summary>How the solver works</summary>
+        <p><strong>Equations.</strong> Every joint is a frictionless pin, so each one gives two equilibrium equations, ΣF<sub>x</sub> = 0 and ΣF<sub>y</sub> = 0. With <em>j</em> joints that makes 2<em>j</em> equations.</p>
+        <p><strong>Unknowns.</strong> The unknowns are one axial force per member (<em>m</em>) plus one per reaction component (<em>r</em>). A pin gives 2 components, a roller gives 1.</p>
+        <p><strong>Matrix.</strong> A tensile force T in a member from joint a to joint b pulls a towards b. With unit vector (c<sub>x</sub>, c<sub>y</sub>) from a to b, it adds +c<sub>x</sub>T and +c<sub>y</sub>T to joint a's equations and −c<sub>x</sub>T and −c<sub>y</sub>T to joint b's. Gathering the coefficients gives <strong>A·x = −P</strong>. Each row is one equation, each column is one unknown, and P holds the applied loads.</p>
+        <p><strong>Stability.</strong> A unique solution needs as many independent equations as unknowns, so the first check is 2<em>j</em> = <em>m</em> + <em>r</em>. That condition is necessary but not sufficient, because geometry can make equations repeat each other (for example, all reactions parallel). The rank of A settles it: rank &lt; 2<em>j</em> means a mechanism, and rank &lt; <em>m</em> + <em>r</em> means redundant members.</p>
+        <p><strong>Solve.</strong> Gaussian elimination with partial pivoting, written by hand in <code>solver.js</code>.</p>
+        <p><strong>Deflections.</strong> By virtual work, member extensions and joint displacements are related by the <em>transpose</em> of the same matrix: Aᵀ·u = −e, with e = TL/EA.</p>
+      </details>
+    </aside>
+  </main>
+
+  <dialog id="matrixDialog">
+    <div class="dialog-head">
+      <h2>Equilibrium matrix</h2>
+      <button class="btn icon" id="matrixClose" aria-label="Close">✕</button>
+    </div>
+    <div id="matrixBody"></div>
+  </dialog>
+
+  <script src="solver.js"></script>
+  <script src="presets.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
